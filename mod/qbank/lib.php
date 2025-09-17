@@ -23,6 +23,8 @@
  * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use core_question\local\bank\question_edit_contexts;
+
 /**
  * Return if the plugin supports $feature.
  *
@@ -50,6 +52,81 @@ function qbank_supports(string $feature) {
             return MOD_PURPOSE_CONTENT;
         default:
             return null;
+    }
+}
+
+/**
+ * This function extends the settings navigation block for the site.
+ *
+ * It is safe to rely on PAGE here as we will only ever be within the module
+ * context when this is called
+ *
+ * @param settings_navigation $settings
+ * @param navigation_node $quiznode
+ * @return void
+ */
+function qbank_extend_settings_navigation(settings_navigation $settings, navigation_node $qbanknode) {
+    global $CFG, $PAGE;
+
+    require_once($CFG->libdir.'/questionlib.php');
+
+    $context = $settings->get_page()->context ?? $PAGE->context;
+
+    $params = [];
+    $targetcontext = null;
+
+    if ($context->contextlevel === CONTEXT_MODULE) {
+        $cm = $settings->get_page()->cm ?? null;
+        if (empty($cm)) {
+            return;
+        }
+        $params['cmid'] = $cm->id;
+        $targetcontext = context_module::instance($cm->id);
+
+    } else if ($context->contextlevel === CONTEXT_COURSE) {
+        $course = $settings->get_page()->course ?? $PAGE->course ?? null;
+        if (empty($course)) {
+            return;
+        }
+        $params['courseid'] = $course->id;
+        $targetcontext = context_course::instance($course->id);
+
+    } else {
+        return;
+    }
+
+    if (($catstr = $PAGE->url->param('cat')) && preg_match('~^\d+,\d+$~', $catstr)) {
+        $params['cat'] = $catstr;
+    } else {
+        if ($defaultcat = question_get_default_category($targetcontext->id)) {
+            $params['cat'] = $defaultcat->id . ',' . $defaultcat->contextid;
+        }
+    }
+
+    $qcontexts = new question_edit_contexts($targetcontext);
+
+    if ($qcontexts->have_one_edit_tab_cap('import')) {
+        $node = navigation_node::create(
+                get_string('import', 'core_question'),
+                new moodle_url('/question/bank/importquestions/import.php', $params),
+                navigation_node::TYPE_SETTING,
+                null,
+                'mod_qbank_import',
+                new pix_icon('i/import', '')
+        );
+        $qbanknode->add_node($node);
+    }
+
+    if ($qcontexts->have_one_edit_tab_cap('export')) {
+        $node = navigation_node::create(
+                get_string('export', 'core_question'),
+                new moodle_url('/question/bank/exportquestions/export.php', $params),
+                navigation_node::TYPE_SETTING,
+                null,
+                'mod_qbank_export',
+                new pix_icon('i/export', '')
+        );
+        $qbanknode->add_node($node);
     }
 }
 
